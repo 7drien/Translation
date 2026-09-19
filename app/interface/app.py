@@ -1,6 +1,6 @@
 """
 Interactive Chatbot CLI for French -> English Translation.
-Allows interactive conversation and translation with customizable decoding strategies.
+Powered by an optimized Transformer with Beam Search decoding.
 """
 
 from __future__ import annotations
@@ -11,27 +11,24 @@ from .api import Translator
 
 def run_chatbot(
     translator: Translator,
-    default_strategy: str = "beam",
-    default_beam_size: int = 4
+    default_beam_size: int = 5
 ) -> None:
-    """Run interactive terminal session."""
+    """Run interactive terminal translation session."""
     print("=" * 60)
     print("🤖  BOT DE TRADUCTION NEURONALE (Français → Anglais)")
-    print("    Architecture Transformer entraînée from scratch")
+    print("    Architecture Transformer avec Beam Search optimisé")
     print("=" * 60)
     print("Commandes disponibles :")
-    print("  /mode [greedy|beam]  : Basculer la stratégie de décodage")
-    print("  /beam <taille>       : Ajuster la taille du beam (ex: /beam 5)")
-    print("  /aide                : Afficher cette aide")
-    print("  /quitter             : Quitter le chatbot")
+    print("  /beam <taille>  : Ajuster la taille du beam (ex: /beam 5)")
+    print("  /aide           : Afficher cette aide")
+    print("  /quitter        : Quitter le chatbot")
     print("-" * 60)
 
-    strategy = default_strategy
     beam_size = default_beam_size
 
     while True:
         try:
-            print(f"\n[Mode: {strategy.upper()}{f' (taille={beam_size})' if strategy == 'beam' else ''}]")
+            print(f"\n[Beam Search: k={beam_size}]")
             user_input = input("Français > ").strip()
 
             if not user_input:
@@ -42,32 +39,21 @@ def run_chatbot(
                 break
 
             if user_input.lower() in ("/aide", "/help"):
-                print("Commandes : /mode [greedy|beam], /beam <n>, /quitter")
+                print("Commandes : /beam <taille>, /quitter")
                 continue
 
-            if user_input.lower().startswith("/mode"):
-                parts = user_input.split()
-                if len(parts) > 1 and parts[1].lower() in ("greedy", "beam"):
-                    strategy = parts[1].lower()
-                    print(f"Stratégie modifiée : {strategy}")
-                else:
-                    print("Usage: /mode greedy  ou  /mode beam")
-                continue
-
-            if user_input.lower().startswith("/beam"):
+            if user_input.lower().startswith("/beam") or user_input.lower().startswith("/taille"):
                 parts = user_input.split()
                 if len(parts) > 1 and parts[1].isdigit():
                     beam_size = max(1, int(parts[1]))
-                    strategy = "beam"
                     print(f"Taille du beam ajustée à : {beam_size}")
                 else:
-                    print("Usage: /beam <entier>")
+                    print("Usage: /beam <entier> (ex: /beam 5)")
                 continue
 
-            # Perform translation
+            # Perform translation using Beam Search
             english_trans = translator.translate(
                 sentence=user_input,
-                strategy=strategy,
                 beam_size=beam_size
             )
 

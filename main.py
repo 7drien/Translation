@@ -3,11 +3,11 @@ Main entry point for the French -> English Neural Machine Translation project.
 Executes the end-to-end training and evaluation pipeline:
 1. Dataset acquisition (Internet / Kaggle download) & cleaning
 2. Byte-Pair Encoding (BPE) tokenizer training from scratch
-3. Transformer model initialization (Encoder-Decoder from scratch)
+3. High-performance Transformer model initialization (Pre-LN, GELU, Weight Tying)
 4. Overfitting / Memorization sanity check on real data
-5. Full model training with validation and checkpointing
-6. Autoregressive decoding (Greedy vs Beam Search)
-7. Metric evaluation (chrF) & qualitative error analysis
+5. Full model training with AdamW, validation and checkpointing
+6. Optimized Beam Search decoding with repetition blocking
+7. Metric evaluation (chrF) & error analysis
 8. Interactive chatbot interface
 """
 
@@ -21,7 +21,7 @@ from app.data import prepare_dataset, clean_files, split_and_save, create_datalo
 from app.tokenizer import train_bpe, BPETokenizer
 from app.model import Transformer, create_masks
 from app.training import train_model, save_checkpoint, load_checkpoint
-from app.inference import greedy_decode, beam_search_decode
+from app.inference import beam_search_decode
 from app.evaluation import corpus_chrf, analyze_translation_errors
 from app.interface import Translator, run_chatbot
 
@@ -121,10 +121,10 @@ def step_6_memorization_sanity_check(
         d_ff=256,
         dropout=0.0,
         pad_idx=0,
-        norm_first=True
+        tie_weights=True
     ).to(device)
 
-    optimizer = torch.optim.Adam(toy_model.parameters(), lr=1e-3)
+    optimizer = torch.optim.AdamW(toy_model.parameters(), lr=1e-3)
     criterion = torch.nn.CrossEntropyLoss(ignore_index=0)
 
     src, tgt = next(iter(toy_loader))
@@ -158,11 +158,15 @@ def step_7_and_8_train(
     device: torch.device,
     epochs: int = 15,
     batch_size: int = 32,
+    d_model: int = 256,
+    num_heads: int = 8,
+    num_layers: int = 4,
+    d_ff: int = 1024,
     checkpoint_dir: str = "checkpoints"
 ) -> Transformer:
-    """Train the Transformer on the full dataset with validation."""
+    """Train the optimized Transformer on the full dataset with validation."""
     print("\n" + "=" * 60)
-    print("STEP 7 & 8: Full Model Training with Validation")
+    print("STEP 7 & 8: High-Performance Model Training with Validation")
     print("=" * 60)
 
     def load_split(src_p, tgt_p):
@@ -175,21 +179,22 @@ def step_7_and_8_train(
     train_loader = create_dataloader(train_pairs, src_tokenizer, tgt_tokenizer, batch_size=batch_size, shuffle=True)
     val_loader = create_dataloader(valid_pairs, src_tokenizer, tgt_tokenizer, batch_size=batch_size, shuffle=False)
 
-    print(f"Initializing Transformer Architecture:")
+    print(f"Initializing Enhanced Transformer Architecture:")
     print(f"  Src Vocab: {len(src_tokenizer.vocab)} | Tgt Vocab: {len(tgt_tokenizer.vocab)}")
-    print(f"  d_model=256, num_heads=4, N_enc=4, N_dec=4, d_ff=1024, dropout=0.1")
+    print(f"  d_model={d_model}, num_heads={num_heads}, N_enc={num_layers}, N_dec={num_layers}, d_ff={d_ff}")
+    print(f"  Pre-LN + GELU activations + Weight Tying + Decoupled AdamW")
 
     model = Transformer(
         src_vocab_size=len(src_tokenizer.vocab),
         tgt_vocab_size=len(tgt_tokenizer.vocab),
-        d_model=256,
-        num_heads=4,
-        num_encoder_layers=4,
-        num_decoder_layers=4,
-        d_ff=1024,
+        d_model=d_model,
+        num_heads=num_heads,
+        num_encoder_layers=num_layers,
+        num_decoder_layers=num_layers,
+        d_ff=d_ff,
         dropout=0.1,
         pad_idx=0,
-        norm_first=True
+        tie_weights=True
     ).to(device)
 
     train_model(
@@ -198,7 +203,8 @@ def step_7_and_8_train(
         val_loader=val_loader,
         num_epochs=epochs,
         lr=5e-4,
-        warmup_steps=200,
+        warmup_steps=300,
+        weight_decay=0.01,
         checkpoint_dir=checkpoint_dir,
         device=device,
         label_smoothing=0.1,
@@ -213,11 +219,12 @@ def step_9_10_11_evaluation(
     model: Transformer,
     src_tokenizer: BPETokenizer,
     tgt_tokenizer: BPETokenizer,
-    device: torch.device
+    device: torch.device,
+    beam_size: int = 5
 ):
-    """Run Greedy vs Beam Search decoding, compute metrics and error analysis."""
+    """Run Beam Search decoding with repetition blocking, compute metrics and error analysis."""
     print("\n" + "=" * 60)
-    print("STEP 9, 10 & 11: Greedy vs Beam Search Evaluation & Error Analysis")
+    print("STEP 9, 10 & 11: Beam Search Evaluation & Error Analysis")
     print("=" * 60)
 
     with open(split_paths["test"][0], "r", encoding="utf-8") as fs, open(split_paths["test"][1], "r", encoding="utf-8") as ft:
@@ -228,29 +235,24 @@ def step_9_10_11_evaluation(
 
     translator = Translator(model, src_tokenizer, tgt_tokenizer, device=device)
 
-    print("\nGenerating translations on test sample...")
-    greedy_translations = translator.translate_batch(sources, strategy="greedy")
-    beam_translations = translator.translate_batch(sources, strategy="beam", beam_size=4)
+    print(f"\nGenerating translations on test sample with Beam Search (beam_size={beam_size})...")
+    beam_translations = translator.translate_batch(sources, beam_size=beam_size)
 
-    # Compute chrF scores
-    chrf_greedy = corpus_chrf(greedy_translations, references)
-    chrf_beam = corpus_chrf(beam_translations, references)
-
-    print(f"\nResults Comparison:")
-    print(f"  Greedy Decoding chrF: {chrf_greedy * 100:.2f}%")
-    print(f"  Beam Search (k=4) chrF: {chrf_beam * 100:.2f}%")
+    # Compute chrF score
+    chrf_score = corpus_chrf(beam_translations, references)
+    print(f"\nEvaluation Result:")
+    print(f"  Beam Search (k={beam_size}) chrF: {chrf_score * 100:.2f}%")
 
     print("\nSample Translations (Side-by-Side):")
     print("-" * 80)
     for i in range(min(5, len(sources))):
         print(f"FR       : {sources[i]}")
         print(f"REF (EN) : {references[i]}")
-        print(f"GREEDY   : {greedy_translations[i]}")
-        print(f"BEAM (k=4): {beam_translations[i]}")
+        print(f"PRED (EN): {beam_translations[i]}")
         print("-" * 80)
 
     # Qualitative Error Analysis
-    print("\nError Analysis (Beam Search):")
+    print("\nError Analysis:")
     analysis = analyze_translation_errors(sources, beam_translations, references)
     print(f"  Repetition Rate: {analysis['repetition_rate']}%")
     print(f"  Omission Rate  : {analysis['omission_rate']}%")
@@ -270,6 +272,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--vocab-size", type=int, default=2000, help="BPE vocabulary size")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
+    parser.add_argument("--beam-size", type=int, default=5, help="Beam size for inference")
     parser.add_argument("--chat", action="store_true", help="Launch interactive chatbot (loads existing checkpoint if available)")
     parser.add_argument("--force-train", action="store_true", help="Force retraining even if a checkpoint exists when using --chat")
     parser.add_argument("--skip-memorize", action="store_true", help="Skip the step 6 sanity check")
@@ -292,7 +295,7 @@ def main():
             tgt_tokenizer_path=tgt_tok_file,
             device=device
         )
-        run_chatbot(translator)
+        run_chatbot(translator, default_beam_size=args.beam_size)
         return
 
     # Steps 1 & 2: Data & Tokenizer
@@ -317,18 +320,19 @@ def main():
         batch_size=args.batch_size
     )
 
-    # Steps 9, 10, 11: Evaluation & Error Analysis
+    # Steps 9, 10, 11: Evaluation & Error Analysis using Beam Search
     translator = step_9_10_11_evaluation(
         split_paths=split_paths,
         model=model,
         src_tokenizer=src_tokenizer,
         tgt_tokenizer=tgt_tokenizer,
-        device=device
+        device=device,
+        beam_size=args.beam_size
     )
 
     # Step 12: Chatbot
     if args.chat:
-        run_chatbot(translator)
+        run_chatbot(translator, default_beam_size=args.beam_size)
     else:
         print("\nPipeline completed successfully!")
         print("To launch the interactive translation chatbot, run:")

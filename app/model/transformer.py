@@ -1,6 +1,7 @@
 """
 Seq2Seq Transformer architecture built from scratch.
-Combines custom Encoder, Decoder, Attention, and Embeddings.
+Combines custom Encoder, Decoder, Attention, Embeddings, and Weight Tying.
+Optimized for translation performance and training stability.
 """
 
 from __future__ import annotations
@@ -17,8 +18,8 @@ from .masks import create_masks
 
 class Transformer(nn.Module):
     """
-    Full Encoder-Decoder Transformer model for Neural Machine Translation.
-    Trained strictly from scratch without external pre-trained weights.
+    High-Performance Encoder-Decoder Transformer for Neural Machine Translation.
+    Features Pre-LN, GELU activations, residual scaling, and target weight tying.
     """
 
     def __init__(
@@ -26,15 +27,14 @@ class Transformer(nn.Module):
         src_vocab_size: int,
         tgt_vocab_size: int,
         d_model: int = 256,
-        num_heads: int = 4,
+        num_heads: int = 8,
         num_encoder_layers: int = 4,
         num_decoder_layers: int = 4,
         d_ff: int = 1024,
         dropout: float = 0.1,
         max_len: int = 5000,
         pad_idx: int = 0,
-        tie_weights: bool = False,
-        norm_first: bool = True
+        tie_weights: bool = True
     ) -> None:
         super().__init__()
         self.src_vocab_size = src_vocab_size
@@ -48,44 +48,47 @@ class Transformer(nn.Module):
         self.max_len = max_len
         self.pad_idx = pad_idx
         self.tie_weights = tie_weights
-        self.norm_first = norm_first
 
         # Embeddings & Positional Encodings
         self.src_tok_embed = TokenEmbedding(src_vocab_size, d_model)
         self.tgt_tok_embed = TokenEmbedding(tgt_vocab_size, d_model)
         self.pos_encoder = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
 
-        # Encoder & Decoder
+        # Encoder & Decoder Stacks (Pre-LN with GELU)
         self.encoder = TransformerEncoder(
             num_layers=num_encoder_layers,
             d_model=d_model,
             num_heads=num_heads,
             d_ff=d_ff,
-            dropout=dropout,
-            norm_first=norm_first
+            dropout=dropout
         )
         self.decoder = TransformerDecoder(
             num_layers=num_decoder_layers,
             d_model=d_model,
             num_heads=num_heads,
             d_ff=d_ff,
-            dropout=dropout,
-            norm_first=norm_first
+            dropout=dropout
         )
 
         # Output projection to target vocabulary
         self.generator = nn.Linear(d_model, tgt_vocab_size, bias=False)
 
-        if tie_weights and src_vocab_size == tgt_vocab_size:
+        # Weight tying: share target embedding weights with generator projection head
+        # Dramatically reduces parameter count and improves target vocabulary representations
+        if tie_weights:
             self.generator.weight = self.tgt_tok_embed.embedding.weight
 
-        self._reset_parameters()
+        self._init_weights()
 
-    def _reset_parameters(self) -> None:
-        """Xavier / Glorot initialization of model weights."""
+    def _init_weights(self) -> None:
+        """Initialize parameters using Xavier uniform and normal distributions."""
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
+        # Initialize embeddings with normal distribution std = 0.02
+        nn.init.normal_(self.src_tok_embed.embedding.weight, mean=0.0, std=0.02)
+        if not self.tie_weights:
+            nn.init.normal_(self.tgt_tok_embed.embedding.weight, mean=0.0, std=0.02)
 
     def encode(
         self,
@@ -170,6 +173,5 @@ class Transformer(nn.Module):
             "dropout": self.dropout_rate,
             "max_len": self.max_len,
             "pad_idx": self.pad_idx,
-            "tie_weights": self.tie_weights,
-            "norm_first": self.norm_first
+            "tie_weights": self.tie_weights
         }

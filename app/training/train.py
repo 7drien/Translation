@@ -1,6 +1,6 @@
 """
 Training pipeline with Teacher Forcing for Transformer Translation.
-Implements the training loop, gradient clipping, evaluation, and checkpointing.
+Implements AdamW with decoupled weight decay, Noam scheduling, and validation checkpointing.
 """
 
 from __future__ import annotations
@@ -16,6 +16,28 @@ from ..tokenizer.vocabulary import PAD_IDX
 from .validate import evaluate_loss
 from .checkpoint import save_checkpoint
 from .scheduler import NoamScheduler
+
+
+def get_parameter_groups(model: nn.Module, weight_decay: float = 0.01) -> List[Dict[str, Any]]:
+    """
+    Separate parameters into decay (weights with dim >= 2) and no_decay (biases, LayerNorm).
+    Prevents regularizing normalization weights and biases.
+    """
+    decay_params = []
+    no_decay_params = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.dim() >= 2:
+            decay_params.append(param)
+        else:
+            no_decay_params.append(param)
+
+    return [
+        {"params": decay_params, "weight_decay": weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0}
+    ]
 
 
 def train_epoch(
@@ -74,6 +96,7 @@ def train_model(
     num_epochs: int = 15,
     lr: float = 5e-4,
     warmup_steps: int = 400,
+    weight_decay: float = 0.01,
     checkpoint_dir: str = "checkpoints",
     device: Optional[torch.device] = None,
     pad_idx: int = PAD_IDX,
@@ -81,7 +104,7 @@ def train_model(
     verbose: bool = True
 ) -> Dict[str, List[float]]:
     """
-    Full training loop with validation and checkpointing.
+    Full training loop with AdamW optimizer, validation, and checkpointing.
 
     Returns:
         Dictionary with history of 'train_loss' and 'val_loss'.
@@ -97,8 +120,10 @@ def train_model(
         label_smoothing=label_smoothing
     )
 
-    optimizer = torch.optim.Adam(
-        model.parameters(),
+    # AdamW with decoupled weight decay for superior generalization
+    param_groups = get_parameter_groups(model, weight_decay=weight_decay)
+    optimizer = torch.optim.AdamW(
+        param_groups,
         lr=lr,
         betas=(0.9, 0.98),
         eps=1e-9

@@ -36,7 +36,7 @@ def download_internet_dataset(
     src_path = os.path.join(output_dir, "corpus.fr")
     tgt_path = os.path.join(output_dir, "corpus.en")
 
-    print(f"Téléchargement du dataset depuis {url}...")
+    print(f"Downloading dataset from {url}...")
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -46,7 +46,7 @@ def download_internet_dataset(
     with urllib.request.urlopen(req, timeout=45) as resp:
         content = resp.read()
 
-    print(f"✓ Archive téléchargée ({len(content) / (1024 * 1024):.2f} Mo). Extraction des phrases...")
+    print(f"✓ Archive downloaded ({len(content) / (1024 * 1024):.2f} MB). Extracting sentence pairs...")
 
     pairs: List[Tuple[str, str]] = []
     with zipfile.ZipFile(io.BytesIO(content)) as z:
@@ -64,7 +64,7 @@ def download_internet_dataset(
                         if max_samples is not None and len(pairs) >= max_samples:
                             break
 
-    print(f"✓ {len(pairs)} paires de phrases extraites.")
+    print(f"✓ {len(pairs)} sentence pairs extracted.")
 
     with open(src_path, "w", encoding="utf-8") as fs, open(tgt_path, "w", encoding="utf-8") as ft:
         for fr, en in pairs:
