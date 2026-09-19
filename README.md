@@ -146,7 +146,7 @@ Built from scratch (`app/tokenizer/`):
 
 - **Automatic Internet Download**: Downloads the Tatoeba French-English corpus (~240,500 parallel pairs, identical to Kaggle datasets `devansodariya/english-french-translations` and `dhruvildave/french-english-bilingual-pairs`).
 - **Local Kaggle Support**: Load any local Kaggle CSV/TSV via `--source local --kaggle-file path/to/dataset.csv`.
-- **Cleaning & Splits**: Normalizes unicode (`NFKC`), filters by length (1 to 50 words) and length ratio, with 80/10/10 Train/Validation/Test splits.
+- **Cleaning & Splits**: Normalizes unicode (`NFKC`), ensures sequences retain natural length variation without artificial truncations, and splits data into 80/10/10 Train/Validation/Test splits.
 
 ---
 
@@ -231,11 +231,11 @@ pip install torch numpy
 ### 2. Running the Full Pipeline
 
 ```bash
-# Standard training run (10,000 sentences, 10 epochs, 8 heads)
-.venv/bin/python main.py --source internet --max-samples 10000 --epochs 10 --vocab-size 2000
+# Standard training run on the entire dataset (~240k sentences, 8000 vocab)
+.venv/bin/python main.py --source internet --skip-memorize --epochs 10
 
-# Scaled training run (50,000 sentences, 20 epochs)
-.venv/bin/python main.py --source internet --max-samples 50000 --epochs 20 --vocab-size 4000
+# Fast testing run on a small subset
+.venv/bin/python main.py --source internet --max-samples 10000 --epochs 5 --vocab-size 2000
 ```
 
 ### 3. Interactive Translation Chatbot
@@ -265,10 +265,10 @@ Or launch directly from a saved checkpoint:
 | Argument | Type | Default | Description |
 |---|---|---|---|
 | `--source` | `str` | `"internet"` | Data source (`"internet"` for Tatoeba/Kaggle download, or `"local"`). |
-| `--max-samples` | `int` | `10000` | Number of sentence pairs to extract. |
+| `--max-samples` | `int` | `None` | Number of sentence pairs to extract (`None` for all). |
 | `--kaggle-file` | `str` | `None` | Path to a local CSV/TSV Kaggle dataset when `--source local`. |
 | `--epochs` | `int` | `10` | Number of training epochs. |
-| `--vocab-size` | `int` | `2000` | Target BPE vocabulary size. |
+| `--vocab-size` | `int` | `8000` | Target BPE vocabulary size. |
 | `--batch-size` | `int` | `32` | Training batch size. |
 | `--beam-size` | `int` | `5` | Beam search width for inference. |
 | `--skip-memorize` | `flag` | `False` | Skip the step 4 memorization sanity check. |
