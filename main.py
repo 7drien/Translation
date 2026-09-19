@@ -1,14 +1,14 @@
 """
 Main entry point for the French -> English Neural Machine Translation project.
-Implements the 13-step progression from agents.md:
-1. Tokenizer training & validation from real web/Kaggle dataset
-2. Dataset download, cleaning & splitting
-3. Transformer model initialization from scratch
-4. Overfitting / Memorization test (crucial sanity check on real data)
-5. Full training with validation & checkpointing
-6. Greedy & Beam Search decoding
-7. Metric evaluation (chrF) & error analysis
-8. Interactive chatbot
+Executes the end-to-end training and evaluation pipeline:
+1. Dataset acquisition (Internet / Kaggle download) & cleaning
+2. Byte-Pair Encoding (BPE) tokenizer training from scratch
+3. Transformer model initialization (Encoder-Decoder from scratch)
+4. Overfitting / Memorization sanity check on real data
+5. Full model training with validation and checkpointing
+6. Autoregressive decoding (Greedy vs Beam Search)
+7. Metric evaluation (chrF) & qualitative error analysis
+8. Interactive chatbot interface
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def step_1_and_2_data_and_tokenizer(
     local_file: str | None = None,
     vocab_size: int = 2000
 ):
-    """Download real dataset from the internet/Kaggle, clean, split, and train BPE tokenizers."""
+    """Download dataset from the internet/Kaggle, clean, split, and train BPE tokenizers."""
     print("\n" + "=" * 60)
     print("STEP 1 & 2: Dataset Acquisition (Internet/Kaggle) & BPE Tokenizer")
     print("=" * 60)
@@ -57,7 +57,7 @@ def step_1_and_2_data_and_tokenizer(
     split_paths = split_and_save(pairs, output_dir=data_dir, train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1)
     print(f"✓ Dataset split: train ({len(pairs)*0.8:.0f}), valid ({len(pairs)*0.1:.0f}), test ({len(pairs)*0.1:.0f})")
 
-    # Train BPE Tokenizer on real French and English corpora
+    # Train BPE Tokenizers on French and English corpora
     fr_sentences = [p[0] for p in pairs]
     en_sentences = [p[1] for p in pairs]
 
@@ -74,7 +74,7 @@ def step_1_and_2_data_and_tokenizer(
     tgt_tokenizer.save(tgt_tok_path)
     print(f"  English Vocab: {len(tgt_tokenizer.vocab)} tokens. Saved to {tgt_tok_path}")
 
-    # Test round-trip encoding/decoding on a real sentence from dataset
+    # Test round-trip encoding/decoding on a sample sentence from the dataset
     test_phrase = pairs[0][0]
     encoded = src_tokenizer.encode(test_phrase)
     decoded = src_tokenizer.decode(encoded)
@@ -92,9 +92,9 @@ def step_6_memorization_sanity_check(
     steps: int = 200
 ):
     """
-    Crucial sanity check from agents.md:
+    Crucial sanity check:
     Verify that the model can quickly overfit and memorize a small batch of real sentences.
-    Validates causal mask, teacher forcing, dimensions, and gradient flow.
+    Validates causal masks, teacher forcing, dimensions, and gradient flow.
     """
     print("\n" + "=" * 60)
     print("STEP 6: Overfitting / Memorization Sanity Check (Real Data)")
@@ -270,12 +270,30 @@ def main():
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--vocab-size", type=int, default=2000, help="BPE vocabulary size")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--chat", action="store_true", help="Launch interactive chatbot after pipeline")
+    parser.add_argument("--chat", action="store_true", help="Launch interactive chatbot (loads existing checkpoint if available)")
+    parser.add_argument("--force-train", action="store_true", help="Force retraining even if a checkpoint exists when using --chat")
     parser.add_argument("--skip-memorize", action="store_true", help="Skip the step 6 sanity check")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using compute device: {device}")
+
+    checkpoint_file = "checkpoints/best_model.pt"
+    src_tok_file = "data/tokenizers/tokenizer_fr.json"
+    tgt_tok_file = "data/tokenizers/tokenizer_en.json"
+
+    # If --chat is requested and an existing checkpoint is found, launch chat immediately
+    if args.chat and not args.force_train and os.path.exists(checkpoint_file) and os.path.exists(src_tok_file) and os.path.exists(tgt_tok_file):
+        print(f"\n✓ Found existing trained checkpoint at {checkpoint_file}.")
+        print("Loading model and launching interactive chatbot directly...")
+        translator = Translator.from_checkpoint(
+            checkpoint_path=checkpoint_file,
+            src_tokenizer_path=src_tok_file,
+            tgt_tokenizer_path=tgt_tok_file,
+            device=device
+        )
+        run_chatbot(translator)
+        return
 
     # Steps 1 & 2: Data & Tokenizer
     pairs, split_paths, src_tokenizer, tgt_tokenizer, src_tok_path, tgt_tok_path = step_1_and_2_data_and_tokenizer(
