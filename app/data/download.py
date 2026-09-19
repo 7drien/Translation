@@ -59,12 +59,21 @@ def download_internet_dataset(
                 if len(parts) >= 2:
                     en_text = parts[0].strip()
                     fr_text = parts[1].strip()
+                    
+                    # Keep all valid sentences to allow varied lengths naturally
                     if fr_text and en_text:
                         pairs.append((fr_text, en_text))
-                        if max_samples is not None and len(pairs) >= max_samples:
-                            break
+                        
+    # Shuffle the dataset to ensure a diverse distribution of sentence lengths
+    import random
+    random.seed(42)
+    random.shuffle(pairs)
+    
+    # Take the required number of samples
+    if max_samples is not None:
+        pairs = pairs[:max_samples]
 
-    print(f"✓ {len(pairs)} sentence pairs extracted.")
+    print(f"✓ {len(pairs)} sentence pairs extracted and shuffled.")
 
     with open(src_path, "w", encoding="utf-8") as fs, open(tgt_path, "w", encoding="utf-8") as ft:
         for fr, en in pairs:

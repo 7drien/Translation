@@ -265,12 +265,12 @@ def main():
     parser = argparse.ArgumentParser(description="French -> English Neural Machine Translation Pipeline")
     parser.add_argument("--source", type=str, default="internet", choices=["internet", "local"],
                         help="Data source: 'internet' (downloads Tatoeba/Kaggle dataset) or 'local'")
-    parser.add_argument("--max-samples", type=int, default=10000,
-                        help="Maximum sentence pairs to extract from dataset (default: 10000)")
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Maximum sentence pairs to extract from dataset (default: None for all)")
     parser.add_argument("--kaggle-file", type=str, default=None,
                         help="Path to local Kaggle CSV/TSV file if --source is 'local'")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
-    parser.add_argument("--vocab-size", type=int, default=2000, help="BPE vocabulary size")
+    parser.add_argument("--vocab-size", type=int, default=8000, help="BPE vocabulary size")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--beam-size", type=int, default=5, help="Beam size for inference")
     parser.add_argument("--chat", action="store_true", help="Launch interactive chatbot (loads existing checkpoint if available)")
