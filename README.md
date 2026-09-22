@@ -159,7 +159,7 @@ Weights with dimension $\ge 2$ receive $10^{-2}$ weight decay, while 1D biases a
 Cross-entropy loss with `label_smoothing=0.1` and `ignore_index=PAD_IDX`.
 
 ### Noam Learning Rate Scheduler
-$$\text{lr} = d_{model}^{-0.5} \cdot \min\left(\text{step}^{-0.5}, \text{step} \cdot \text{warmup\_steps}^{-1.5}\right)$$
+$$lr = d_{model}^{-0.5} \cdot \min(step^{-0.5}, step \cdot warmup\_steps^{-1.5})$$
 
 ---
 
