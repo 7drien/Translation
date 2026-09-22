@@ -94,42 +94,49 @@ English Translation ("I would like a coffee.")
 
 ---
 
-## 📐 Mathematical Foundations
+## 📐 Mathematical Foundations & Tensor Dimensions
+
+*(Note: $B$ = Batch Size, $L$ = Sequence Length, $d_{model} = 256$, $h = 8$ heads, $d_k = d_v = 32$, $d_{ff} = 1024$, $V_{size} = 8000$)*
 
 ### 1. Sinusoidal Positional Encoding
-Deterministic sinusoidal encodings provide positional order without learned parameters:
+Deterministic sinusoidal encodings provide positional order. The resulting tensor $PE \in \mathbb{R}^{L \times d_{model}}$ is added to the token embeddings:
 
 $$PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i / d_{model}}}\right)$$
 
 $$PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i / d_{model}}}\right)$$
 
-### 2. Scaled Dot-Product Attention & Fused Kernels
-Given Query ($Q$), Key ($K$), and Value ($V$) matrices:
+### 2. Scaled Dot-Product Attention
+Given Query ($Q$), Key ($K$), and Value ($V$) matrices, all $\in \mathbb{R}^{B \times h \times L \times d_k}$:
 
 $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}} + M\right)V$$
-
-Accelerated via hardware-optimized fused attention primitives.
+- $QK^T \in \mathbb{R}^{B \times h \times L \times L}$ (Attention scores)
+- $M \in \mathbb{R}^{B \times 1 \times L \times L}$ or $\mathbb{R}^{1 \times 1 \times L \times L}$ (Mask tensor)
+- Output $\in \mathbb{R}^{B \times h \times L \times d_k}$
 
 ### 3. Multi-Head Attention (8 Heads)
-Multi-Head Attention projects $Q$, $K$, and $V$ into $h = 8$ distinct representation subspaces:
+Multi-Head Attention projects inputs into $h = 8$ representation subspaces.
+Input sequence $X \in \mathbb{R}^{B \times L \times d_{model}}$.
+Projection weights $W_i^Q, W_i^K, W_i^V \in \mathbb{R}^{d_{model} \times d_k}$ and $W^O \in \mathbb{R}^{d_{model} \times d_{model}}$.
 
-$$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \dots, \text{head}_8)W^O$$
+$$\text{head}_i = \text{Attention}(XW_i^Q, XW_i^K, XW_i^V) \quad \in \mathbb{R}^{B \times L \times d_k}$$
 
-$$\text{head}_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)$$
+$$\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_8)W^O \quad \in \mathbb{R}^{B \times L \times d_{model}}$$
 
 ### 4. Attention Masks
-- **Padding Mask**: Prevents the model from attending to `<PAD>` positions.
-- **Causal (Look-Ahead) Mask**: Upper-triangular boolean mask ensuring position $t$ only attends to positions $\le t$.
+- **Padding Mask**: Boolean tensor of shape $(B, 1, 1, L)$. Prevents attention to `<PAD>` tokens.
+- **Causal (Look-Ahead) Mask**: Upper-triangular boolean tensor of shape $(1, 1, L, L)$ ensuring position $t$ only attends to positions $\le t$.
 
 ### 5. Pre-LN Stacks with Residual Scaling
+For input tensor $x^{(l)} \in \mathbb{R}^{B \times L \times d_{model}}$:
+
 $$x^{(l+1)} = x^{(l)} + \lambda \cdot \text{SubLayer}(\text{LayerNorm}(x^{(l)}))$$
 
 Where $\lambda = \frac{1}{\sqrt{2 N_{layers}}}$ for encoder layers and $\lambda = \frac{1}{\sqrt{3 N_{layers}}}$ for decoder layers.
 
 ### 6. Weight Tying
-Target embedding weights are shared with the final projection head:
+Target embedding weights are shared with the final projection head to output vocabulary logits $\in \mathbb{R}^{B \times L \times V_{size}}$:
 
-$$W_{generator} = W_{tgt\_embedding}$$
+$$W_{generator} = W_{tgt\_embedding} \quad \in \mathbb{R}^{V_{size} \times d_{model}}$$
 
 ---
 
@@ -159,7 +166,7 @@ Weights with dimension $\ge 2$ receive $10^{-2}$ weight decay, while 1D biases a
 Cross-entropy loss with `label_smoothing=0.1` and `ignore_index=PAD_IDX`.
 
 ### Noam Learning Rate Scheduler
-$$lr = d_{model}^{-0.5} \cdot \min(step^{-0.5}, step \cdot warmup\_steps^{-1.5})$$
+$$lr = d_{model}^{-0.5} \cdot \min(step^{-0.5}, step \cdot \text{warmup-steps}^{-1.5})$$
 
 ---
 
