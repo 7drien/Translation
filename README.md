@@ -44,38 +44,35 @@ The system implements an enhanced **Seq2Seq Transformer** architecture with an a
 French Source Sentence ("Je voudrais un café.")
          │
          ▼
-[ BPE Tokenizer (French Vocab) ]
+[ BPE Tokenizer (French Vocab: 8000) ]
          │
-         ▼ Token IDs: [2, 45, 128, 12, 89, 3] (<BOS> ... <EOS>)
+         ▼ Token IDs: [2, 45, 128, 12, 89, 3]   -> Shape: [Batch, Length]
          │
-    ┌────┴────────────────────────────────────────────┐
-    │              ENCODER                            │
-    │  Token Embeddings * sqrt(d_model)               │
-    │  + Sinusoidal Positional Encodings              │
-    │  ┌───────────────────────────────────────────┐  │
-    │  │  Multi-Head Self-Attention (8 heads)      │  │ x 4 Layers
-    │  │  Pre-LN + Residual Scaling                │  │
-    │  │  Position-wise Feed-Forward (GELU, d_ff)  │  │
-    │  └───────────────────────────────────────────┘  │
-    └────────────────────┬────────────────────────────┘
-                         │ Encoder Memory Representations
-                         ▼
-    ┌─────────────────────────────────────────────────┐
-    │              DECODER                            │
-    │  Shifted Target Tokens (<BOS> I would...)       │
-    │  + Sinusoidal Positional Encodings              │
-    │  ┌───────────────────────────────────────────┐  │
-    │  │  Masked Causal Self-Attention (Pre-LN)    │  │
-    │  │  Cross-Attention over Encoder Memory      │  │ x 4 Layers
-    │  │  Position-wise Feed-Forward (GELU, d_ff)  │  │
-    │  │  Residual Scaling                         │  │
-    │  └───────────────────────────────────────────┘  │
-    │  Tied Output Linear Head (Shares Tgt Embeddings)│
-    └────────────────────┬────────────────────────────┘
+    ┌────┴──────────────────────────────────────────────┐
+    │              ENCODER                              │
+    │  Token Embeddings       -> Shape: [B, L, 256]     │
+    │  + Positional Encodings -> Shape: [B, L, 256]     │
+    │  ┌─────────────────────────────────────────────┐  │
+    │  │  Self-Attention (8 h) -> Shape: [B, L, 256] │  │ x 4
+    │  │  FFNN (d_ff=1024)     -> Shape: [B, L, 256] │  │ Layers
+    │  └─────────────────────────────────────────────┘  │
+    └────────────────────┬──────────────────────────────┘
+                         │ Encoder Memory Representation
+                         ▼ (Shape: [Batch, Length, 256])
+    ┌───────────────────────────────────────────────────┐
+    │              DECODER                              │
+    │  Target Tokens          -> Shape: [B, L, 256]     │
+    │  + Positional Encodings -> Shape: [B, L, 256]     │
+    │  ┌─────────────────────────────────────────────┐  │
+    │  │  Masked Attention     -> Shape: [B, L, 256] │  │ x 4
+    │  │  Cross-Attention      -> Shape: [B, L, 256] │  │ Layers
+    │  │  FFNN (d_ff=1024)     -> Shape: [B, L, 256] │  │
+    │  └─────────────────────────────────────────────┘  │
+    │  Output Linear Head     -> Shape: [B, L, 8000]    │
+    └────────────────────┬──────────────────────────────┘
                          │
-                         ▼
-             Optimized Beam Search
-         (Length Penalty + Repetition Blocking)
+                         ▼ Logits (Shape: [Batch, Length, 8000])
+             Optimized Beam Search (k=5)
                          │
                          ▼
 English Translation ("I would like a coffee.")
@@ -96,7 +93,7 @@ English Translation ("I would like a coffee.")
 
 ## 📐 Mathematical Foundations & Tensor Dimensions
 
-*(Note: $B$ = Batch Size, $L$ = Sequence Length, $d_{model} = 256$, $h = 8$ heads, $d_k = d_v = 32$, $d_{ff} = 1024$, $V_{size} = 8000$)*
+*(Note: B = Batch Size, L = Sequence Length, d_model = 256, h = 8 heads, d_k = d_v = 32, d_ff = 1024, V_size = 8000)*
 
 ### 1. Sinusoidal Positional Encoding
 Deterministic sinusoidal encodings provide positional order. The resulting tensor $PE \in \mathbb{R}^{L \times d_{model}}$ is added to the token embeddings:
