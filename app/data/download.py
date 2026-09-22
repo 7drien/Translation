@@ -19,15 +19,16 @@ KAGGLE_TATOEBA_URL = "https://www.manythings.org/anki/fra-eng.zip"
 def download_internet_dataset(
     output_dir: str = "data",
     max_samples: Optional[int] = 10000,
-    url: str = KAGGLE_TATOEBA_URL
+    url: str = ""
 ) -> Tuple[str, str]:
     """
-    Download the real French-English parallel dataset from the internet.
+    Download a high-quality literary French-English dataset (OPUS Books) using HuggingFace Datasets.
+    This replaces the short 'flashcard' Tatoeba dataset with real paragraphs and books.
 
     Args:
         output_dir: Destination directory.
-        max_samples: Maximum number of sentence pairs to extract (None for all ~240,000).
-        url: Direct download link.
+        max_samples: Maximum number of sentence pairs to extract.
+        url: Unused (kept for compatibility).
 
     Returns:
         Tuple of (src_path, tgt_path) for French and English text files.
@@ -36,35 +37,28 @@ def download_internet_dataset(
     src_path = os.path.join(output_dir, "corpus.fr")
     tgt_path = os.path.join(output_dir, "corpus.en")
 
-    print(f"Downloading dataset from {url}...")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
-    req = urllib.request.Request(url, headers=headers)
+    print(f"Downloading high-quality literary dataset (OPUS Books en-fr) via HuggingFace...")
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        print("Error: The 'datasets' library is required. Please install it using: pip install datasets")
+        raise
 
-    with urllib.request.urlopen(req, timeout=45) as resp:
-        content = resp.read()
-
-    print(f"✓ Archive downloaded ({len(content) / (1024 * 1024):.2f} MB). Extracting sentence pairs...")
-
+    dataset = load_dataset("opus_books", "en-fr", split="train")
+    
     pairs: List[Tuple[str, str]] = []
-    with zipfile.ZipFile(io.BytesIO(content)) as z:
-        with z.open("fra.txt") as f:
-            for line in f:
-                decoded = line.decode("utf-8").strip()
-                if not decoded:
-                    continue
-                parts = decoded.split("\t")
-                if len(parts) >= 2:
-                    en_text = parts[0].strip()
-                    fr_text = parts[1].strip()
-                    
-                    # Keep all valid sentences to allow varied lengths naturally
-                    if fr_text and en_text:
-                        pairs.append((fr_text, en_text))
-                        
-    # Shuffle the dataset to ensure a diverse distribution of sentence lengths
+    
+    print(f"✓ Dataset downloaded. Extracting sentence pairs...")
+    
+    for row in dataset:
+        translation = row["translation"]
+        en_text = translation.get("en", "").strip()
+        fr_text = translation.get("fr", "").strip()
+        
+        if fr_text and en_text:
+            pairs.append((fr_text, en_text))
+
+    # Shuffle the dataset to ensure a diverse distribution
     import random
     random.seed(42)
     random.shuffle(pairs)
@@ -73,10 +67,13 @@ def download_internet_dataset(
     if max_samples is not None:
         pairs = pairs[:max_samples]
 
-    print(f"✓ {len(pairs)} sentence pairs extracted and shuffled.")
+    print(f"✓ {len(pairs)} sentence pairs extracted and shuffled from OPUS Books.")
 
     with open(src_path, "w", encoding="utf-8") as fs, open(tgt_path, "w", encoding="utf-8") as ft:
         for fr, en in pairs:
+            # Replace newlines with spaces to avoid breaking the text file format
+            fr = fr.replace('\n', ' ').replace('\r', '')
+            en = en.replace('\n', ' ').replace('\r', '')
             fs.write(fr + "\n")
             ft.write(en + "\n")
 

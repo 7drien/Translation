@@ -74,7 +74,7 @@ class Translator:
         self,
         sentence: str,
         beam_size: int = 5,
-        max_len: int = 60,
+        max_len: Optional[int] = None,
         alpha: float = 0.7,
         no_repeat_ngram_size: int = 3
     ) -> str:
@@ -84,7 +84,7 @@ class Translator:
         Args:
             sentence: Source French text.
             beam_size: Number of hypotheses tracked in beam search (default: 5).
-            max_len: Maximum target tokens to generate.
+            max_len: Maximum target tokens to generate. (Dynamic based on input if None)
             alpha: Length penalty exponent (default: 0.7).
             no_repeat_ngram_size: Prevent repetitive n-gram loops (default: 3).
 
@@ -92,6 +92,10 @@ class Translator:
             Translated English string.
         """
         src_tokens = self.src_tokenizer.encode(sentence, add_bos=True, add_eos=True)
+        
+        # Dynamically set max_len to avoid cutting off long translations
+        if max_len is None:
+            max_len = min(500, int(len(src_tokens) * 1.5) + 20)
 
         out_tokens = beam_search_decode(
             model=self.model,
@@ -112,7 +116,7 @@ class Translator:
         self,
         sentences: List[str],
         beam_size: int = 5,
-        max_len: int = 60,
+        max_len: Optional[int] = None,
         alpha: float = 0.7,
         no_repeat_ngram_size: int = 3
     ) -> List[str]:

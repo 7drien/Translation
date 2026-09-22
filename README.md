@@ -144,9 +144,9 @@ Built from scratch (`app/tokenizer/`):
 
 ## 🌐 Dataset Pipeline & Kaggle / Web Integration
 
-- **Automatic Internet Download**: Downloads the Tatoeba French-English corpus (~240,500 parallel pairs, identical to Kaggle datasets `devansodariya/english-french-translations` and `dhruvildave/french-english-bilingual-pairs`).
+- **Automatic HuggingFace Download**: Downloads the high-quality **OPUS Books** French-English literary corpus (`opus_books`) via the HuggingFace `datasets` library. This provides rich, naturally long, and grammatically complex sentences compared to standard flashcard datasets.
 - **Local Kaggle Support**: Load any local Kaggle CSV/TSV via `--source local --kaggle-file path/to/dataset.csv`.
-- **Cleaning & Splits**: Normalizes unicode (`NFKC`), ensures sequences retain natural length variation without artificial truncations, and splits data into 80/10/10 Train/Validation/Test splits.
+- **Cleaning & Splits**: Normalizes unicode (`NFKC`), ensures sequences retain natural length variation without artificial truncations (to properly train on long sequences), and splits data into 80/10/10 Train/Validation/Test splits.
 
 ---
 
@@ -224,15 +224,15 @@ Translation/
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install PyTorch and NumPy
-pip install torch numpy
+# Install PyTorch, NumPy, and HuggingFace datasets
+pip install torch numpy datasets
 ```
 
 ### 2. Running the Full Pipeline
 
 ```bash
-# Standard training run on the entire dataset (~240k sentences, 8000 vocab)
-.venv/bin/python main.py --source internet --skip-memorize --epochs 10
+# Standard training run on the OPUS Books literary dataset (~50k sentences, 15 epochs)
+.venv/bin/python main.py --source internet --skip-memorize --epochs 15
 
 # Fast testing run on a small subset
 .venv/bin/python main.py --source internet --max-samples 10000 --epochs 5 --vocab-size 2000
