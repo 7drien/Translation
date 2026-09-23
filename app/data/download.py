@@ -18,12 +18,12 @@ KAGGLE_TATOEBA_URL = "https://www.manythings.org/anki/fra-eng.zip"
 
 def download_internet_dataset(
     output_dir: str = "data",
-    max_samples: Optional[int] = 10000,
+    max_samples: Optional[int] = 100000,
     url: str = ""
 ) -> Tuple[str, str]:
     """
-    Download a high-quality literary French-English dataset (OPUS Books) using HuggingFace Datasets.
-    This replaces the short 'flashcard' Tatoeba dataset with real paragraphs and books.
+    Download a high-quality literary French-English dataset using HuggingFace Datasets.
+    Uses 'Helsinki-NLP/opus-100' which contains 1M high-quality sentence pairs.
 
     Args:
         output_dir: Destination directory.
@@ -37,14 +37,15 @@ def download_internet_dataset(
     src_path = os.path.join(output_dir, "corpus.fr")
     tgt_path = os.path.join(output_dir, "corpus.en")
 
-    print(f"Downloading high-quality literary dataset (OPUS Books en-fr) via HuggingFace...")
+    print(f"Downloading high-quality literary dataset (OPUS-100 en-fr) via HuggingFace...")
     try:
         from datasets import load_dataset
     except ImportError:
         print("Error: The 'datasets' library is required. Please install it using: pip install datasets")
         raise
 
-    dataset = load_dataset("opus_books", "en-fr", split="train")
+    # opus-100 has very high quality translated data
+    dataset = load_dataset("Helsinki-NLP/opus-100", "en-fr", split="train")
     
     pairs: List[Tuple[str, str]] = []
     
@@ -67,7 +68,7 @@ def download_internet_dataset(
     if max_samples is not None:
         pairs = pairs[:max_samples]
 
-    print(f"✓ {len(pairs)} sentence pairs extracted and shuffled from OPUS Books.")
+    print(f"✓ {len(pairs)} sentence pairs extracted and shuffled from OPUS-100.")
 
     with open(src_path, "w", encoding="utf-8") as fs, open(tgt_path, "w", encoding="utf-8") as ft:
         for fr, en in pairs:
